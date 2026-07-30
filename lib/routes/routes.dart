@@ -1,4 +1,5 @@
 enum AppRoutes {
+  onboardingScreen("onboarding_screen"),
   otpScreen("otp_screen"),
   loginScreen("login_screen"),
   carModelsScreen("car_models"),

@@ -1,44 +1,49 @@
+import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:ddgs/ddgs.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_downloader/flutter_downloader.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:llama_flutter_android/llama_flutter_android.dart';
-import 'package:path_provider/path_provider.dart';
 
 import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart';
 import 'package:upgrade/models/meal.dart';
+import 'package:upgrade/models/user_profile.dart';
 import 'package:upgrade/providers/user_provider.dart';
 import 'package:upgrade/services/hive_service.dart';
+import 'package:upgrade/services/model_storage_service.dart';
 
 class LlamaState {
   final String? modelPath;
   final bool isLoaded;
+  final bool isLoading;
   final bool isGenerating;
+  final String? error;
 
   const LlamaState({
     this.isLoaded = false,
+    this.isLoading = false,
     this.isGenerating = false,
     this.modelPath,
+    this.error,
   });
 
   LlamaState copyWith({
-    bool? isAvailable,
-    // bool? isChecking,
     bool? isLoaded,
+    bool? isLoading,
     bool? isGenerating,
     String? modelPath,
-    // String? error,
-    // String? generatedText,
+    String? error,
+    bool clearError = false,
   }) {
     return LlamaState(
       isLoaded: isLoaded ?? this.isLoaded,
+      isLoading: isLoading ?? this.isLoading,
       isGenerating: isGenerating ?? this.isGenerating,
       modelPath: modelPath ?? this.modelPath,
+      error: clearError ? null : (error ?? this.error),
     );
   }
 }
@@ -50,234 +55,317 @@ class LlamaNotifier extends Notifier<LlamaState> {
   }
 
   LlamaController? _controller;
+  final List<ChatMessage> _chatHistory = [];
+  static const int _maxChatHistoryMessages = 8;
 
   final ddgs = DDGS();
 
-  Future checkAvailability() async {
-    final path = await _findDownloadedModel();
-    if (path != null) {
-      _controller = LlamaController();
+  static const String _chatSystemPrompt =
+      'You are CoreCare, a friendly on-device health and fitness coach. '
+      'Give clear, practical answers in 2-6 sentences. '
+      'Do not add disclaimer notes such as "I am not a professional". '
+      'Answer the user\'s question directly. '
+      'Use the user profile below when the question is about their diet, '
+      'goals, or health.';
 
+  String _chatSystemPromptWithProfile() {
+    final user = ref.read(userProfileProvider);
+    if (user == null) return _chatSystemPrompt;
+
+    final summary = _profileSummary(user);
+    if (summary.isEmpty) return _chatSystemPrompt;
+    return '$_chatSystemPrompt\n\nUser profile:\n$summary';
+  }
+
+  String _profileSummary(UserProfile user) {
+    final lines = <String>[
+      if (user.name != null && user.name!.trim().isNotEmpty)
+        'Name: ${user.name}',
+      if (user.age != null) 'Age: ${user.age}',
+      if (user.gender != null) 'Gender: ${user.gender}',
+      if (user.height != null && user.weight != null)
+        'Height/weight: ${user.height!.round()} cm, ${user.weight!.round()} kg',
+      if (user.bmi != null)
+        'BMI: ${user.bmi!.toStringAsFixed(1)} (${user.bmiCategory})',
+      if (user.activityLevel != null) 'Activity: ${user.activityLevel}',
+      if (user.dietaryTypes.isNotEmpty)
+        'Diet: ${user.dietaryTypes.join(', ')}',
+      if (user.dietaryRestrictions.isNotEmpty)
+        'Restrictions: ${user.dietaryRestrictions.join(', ')}',
+      if (user.allergies != null && user.allergies!.trim().isNotEmpty)
+        'Allergies: ${user.allergies}',
+      if (user.medicalConditions.isNotEmpty)
+        'Medical conditions: ${user.medicalConditions.join(', ')}',
+    ];
+    return lines.join('\n');
+  }
+
+  Future<void> checkAvailability() async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final path = await ModelStorageService.findGgufModel();
+      if (path == null) {
+        debugPrint('[LLM] No GGUF model on device');
+        state = state.copyWith(
+          isLoaded: false,
+          isLoading: false,
+          modelPath: null,
+        );
+        return;
+      }
+
+      debugPrint('[LLM] Loading model from $path');
+      _controller ??= LlamaController();
       await _controller!.loadModel(modelPath: path);
 
-      state = state.copyWith(isLoaded: true, modelPath: path);
-    } else {
-      state = state.copyWith(isLoaded: false);
+      state = state.copyWith(
+        isLoaded: true,
+        isLoading: false,
+        modelPath: path,
+        clearError: true,
+      );
+      debugPrint('[LLM] Model loaded successfully');
+    } catch (e, st) {
+      debugPrint('[LLM] Failed to load model: $e\n$st');
+      state = state.copyWith(
+        isLoaded: false,
+        isLoading: false,
+        error: e.toString(),
+      );
     }
   }
 
-  Future<List<Meal>> generateMealPlan({bool isRegenerate = false}) async {
-    if (_controller == null) {
+  void clearChatHistory() {
+    _chatHistory.clear();
+    if (_controller != null) {
+      unawaited(_controller!.clearContext());
+    }
+  }
+
+  Stream<String> generateChatStream(String userMessage) async* {
+    if (!state.isLoaded || _controller == null) {
+      await checkAvailability();
+    }
+    if (!state.isLoaded || _controller == null) {
+      throw StateError(state.error ?? 'AI model is not loaded');
+    }
+
+    state = state.copyWith(isGenerating: true, clearError: true);
+
+    final systemPrompt = _chatSystemPromptWithProfile();
+    final messages = <ChatMessage>[
+      ChatMessage(role: 'system', content: systemPrompt),
+      ..._chatHistory,
+      ChatMessage(role: 'user', content: userMessage),
+    ];
+
+    final buffer = StringBuffer();
+    try {
+      await for (final token in _controller!.generateChat(
+        messages: messages,
+        maxTokens: 400,
+        temperature: 0.75,
+        repeatPenalty: 1.15,
+      )) {
+        buffer.write(token);
+        yield token;
+      }
+
+      var reply = _stripDisclaimerOnly(buffer.toString().trim());
+
+      if (reply.isEmpty) {
+        buffer.clear();
+        await for (final token in _controller!.generateChat(
+          messages: [
+            ChatMessage(role: 'system', content: systemPrompt),
+            ChatMessage(
+              role: 'user',
+              content:
+                  'Answer directly with practical tips. No disclaimer notes. '
+                  'Question: $userMessage',
+            ),
+          ],
+          maxTokens: 400,
+          temperature: 0.75,
+          repeatPenalty: 1.15,
+        )) {
+          buffer.write(token);
+          yield token;
+        }
+        reply = _stripDisclaimerOnly(buffer.toString().trim());
+      }
+
+      if (reply.isEmpty) {
+        reply =
+            'I had trouble answering that. Try asking about meals, workouts, '
+            'sleep, hydration, or your daily goals.';
+        yield reply;
+      }
+
+      _chatHistory.add(ChatMessage(role: 'user', content: userMessage));
+      _chatHistory.add(ChatMessage(role: 'assistant', content: reply));
+      while (_chatHistory.length > _maxChatHistoryMessages) {
+        _chatHistory.removeAt(0);
+      }
+    } finally {
+      state = state.copyWith(isGenerating: false);
+    }
+  }
+
+  String _stripDisclaimerOnly(String text) {
+    final lower = text.toLowerCase();
+    if (lower.startsWith('note:') &&
+        (lower.contains('not a professional') ||
+            lower.contains('not a medical') ||
+            lower.contains('not medical advice'))) {
+      final afterParagraph = text.split(RegExp(r'\n\s*\n')).skip(1).join('\n\n');
+      return afterParagraph.trim();
+    }
+    return text;
+  }
+
+  Future<void> stopGeneration() async {
+    if (_controller != null) {
+      await _controller!.stop();
+    }
+    state = state.copyWith(isGenerating: false);
+  }
+
+  Future<List<Meal>> generateMealPlan({
+    bool isRegenerate = false,
+    bool useWebEnrichment = false,
+  }) async {
+    if (_controller == null || !state.isLoaded) {
+      await checkAvailability();
+    }
+    if (_controller == null || !state.isLoaded) {
       return [];
     }
 
-    // If regenerate is requested, clear the cache first
     if (isRegenerate) {
       await HiveService.clearTodaysMealPlan();
-      print("🗑️ Cleared cached meal plan, generating new one...");
+      debugPrint('[LLM] Cleared cached meal plan for regeneration');
     }
 
-    // Check if we already have today's meal plan
-    if (HiveService.hasTodaysMealPlan()) {
-      try {
-        final cachedMealPlan = HiveService.getTodaysMealPlan();
-        if (cachedMealPlan != null) {
-          final meals = <Meal>[];
-          for (final mealJson in cachedMealPlan) {
-            try {
-              // Ensure we have the correct type
-              final Map<String, dynamic> cleanJson = Map<String, dynamic>.from(
-                mealJson,
-              );
-              meals.add(Meal.fromJson(cleanJson));
-            } catch (e) {
-              print("❌ Error parsing cached meal: $e");
-              print("🔍 Meal data: $mealJson");
-            }
-          }
+    if (!isRegenerate && HiveService.hasTodaysMealPlan()) {
+      final cached = _loadCachedMeals();
+      if (cached.isNotEmpty) return cached;
+    }
 
-          if (meals.isNotEmpty) {
-            final generatedTime = HiveService.getMealPlanGeneratedTime();
-            print("📱 Using cached meal plan generated at: $generatedTime");
-            return meals;
-          } else {
-            print("❌ No valid meals in cache, clearing...");
-            await HiveService.clearTodaysMealPlan();
-          }
-        }
-      } catch (e) {
-        print("❌ Error loading cached meal plan: $e");
-        print("🧹 Clearing corrupted cache...");
-        await HiveService.clearTodaysMealPlan();
-      }
-    } else {
-      print("🔄 Generating new meal plan for today...");
-      final userProfile = ref.read(userProfileProvider.notifier).userJson();
-      final dataFromWeb = await textSearch();
+    final userProfile = ref.read(userProfileProvider.notifier).userJson();
+    final webContext = useWebEnrichment ? await textSearch() : null;
 
-      // 🧠 Prompt for LLaMA
-      final prompt =
-          """
+    final prompt = '''
 You are a certified nutritionist. Create a complete daily meal plan based on:
 
 User Profile: ${jsonEncode(userProfile)}
-Information from web: $dataFromWeb
+${webContext != null ? 'Reference notes: $webContext' : 'Use only the user profile — no external data.'}
 
 Create exactly 4 meals: Breakfast, Lunch, Dinner, and Snacks.
-Return ONLY valid JSON array with this exact structure:
+Each food item must include calories and macros in grams.
+
+Return ONLY a valid JSON array with this structure:
 
 [
-  {"name":"Breakfast","totalCalories":,"items":[{"name":"","calories":},{"name":"","calories":},{"name":"","calories":}]},
-  {"name":"Lunch","totalCalories":,"items":[{"name":"","calories":},{"name":"","calories":},{"name":"","calories":}]},
-  {"name":"Dinner","totalCalories":,"items":[{"name":"","calories":},{"name":"","calories":},{"name":"","calories":}]},
-  {"name":"Snacks","totalCalories":,"items":[{"name":"","calories":},{"name":"","calories":},{"name":"","calories":}]}
+  {"name":"Breakfast","totalCalories":500,"items":[
+    {"name":"Food name","calories":200,"carbsG":30,"proteinG":12,"fatG":8,"fiberG":4}
+  ]},
+  {"name":"Lunch","totalCalories":600,"items":[...]},
+  {"name":"Dinner","totalCalories":600,"items":[...]},
+  {"name":"Snacks","totalCalories":200,"items":[...]}
 ]
 
 Return only the JSON array, no markdown, no explanations.
-""";
+''';
 
-      print(
-        "⏳ Generating complete daily meal plan (Breakfast, Lunch, Dinner, Snacks)...",
-      );
+    debugPrint('[LLM] Generating meal plan (web=$useWebEnrichment)...');
 
-      final output = StringBuffer();
-      final stream = _controller!.generate(
-        prompt: prompt,
-        maxTokens: 800,
-        temperature: 0.3,
-      );
-
-      await for (final token in stream) {
-        output.write(token);
-      }
-
-      final rawOutput = output.toString().trim();
-      print("\n✅ Raw LLaMA Output:\n$rawOutput");
-
-      try {
-        // 🧹 Clean output (remove markdown formatting)
-        String cleaned = rawOutput;
-
-        // Remove markdown code blocks
-        if (cleaned.contains('```json')) {
-          final startIndex = cleaned.indexOf('```json') + 7;
-          final endIndex = cleaned.indexOf('```', startIndex);
-          if (endIndex != -1) {
-            cleaned = cleaned.substring(startIndex, endIndex);
-          } else {
-            cleaned = cleaned.substring(startIndex);
-          }
-        } else if (cleaned.contains('```')) {
-          final startIndex = cleaned.indexOf('```') + 3;
-          final endIndex = cleaned.indexOf('```', startIndex);
-          if (endIndex != -1) {
-            cleaned = cleaned.substring(startIndex, endIndex);
-          } else {
-            cleaned = cleaned.substring(startIndex);
-          }
-        }
-
-        cleaned = cleaned.trim();
-
-        // 🔍 Extract JSON array - find the most complete array
-        int start = cleaned.indexOf('[');
-        int end = -1;
-
-        if (start != -1) {
-          int bracketCount = 0;
-          for (int i = start; i < cleaned.length; i++) {
-            if (cleaned[i] == '[') bracketCount++;
-            if (cleaned[i] == ']') {
-              bracketCount--;
-              if (bracketCount == 0) {
-                end = i;
-                break;
-              }
-            }
-          }
-        }
-
-        if (start == -1 || end == -1) {
-          print("⚠️ No complete JSON array found in output");
-          print(
-            "🔍 Cleaned text: ${cleaned.substring(0, cleaned.length.clamp(0, 200))}...",
-          );
-          return [];
-        }
-
-        final jsonString = cleaned.substring(start, end + 1);
-        print("\n🧹 Cleaned JSON:\n$jsonString");
-
-        final parsed = jsonDecode(jsonString);
-
-        if (parsed is! List) {
-          print(
-            "⚠️ Invalid format — expected a List, got ${parsed.runtimeType}",
-          );
-          return [];
-        }
-
-        // ✅ Convert parsed data → List<Meal>
-        final meals = <Meal>[];
-        for (final mealData in parsed) {
-          try {
-            if (mealData is Map<String, dynamic>) {
-              meals.add(Meal.fromJson(mealData));
-            } else {
-              print("⚠️ Invalid meal data format: ${mealData.runtimeType}");
-            }
-          } catch (e) {
-            print("⚠️ Error parsing meal: $e");
-            print("🔍 Meal data: $mealData");
-          }
-        }
-
-        if (meals.isEmpty) {
-          print("⚠️ No valid meals parsed from JSON");
-          return [];
-        }
-
-        // 🍱 Print structured data
-        int totalCalories = 0;
-        print("\n🍱 Daily Meal Plan");
-        print("=" * 50);
-        for (final meal in meals) {
-          print("${meal.name} (${meal.totalCalories} kcal)");
-          for (final item in meal.items) {
-            print("   • ${item.name} - ${item.calories} kcal");
-          }
-          totalCalories += meal.totalCalories;
-        }
-        print("=" * 50);
-        print("📊 Total Calories: $totalCalories kcal\n");
-
-        // 👤 User target calories (optional)
-        final targetCalories = _calculateTargetCalories(userProfile);
-        print(
-          "👤 Target for ${userProfile!['name']}: ~$targetCalories kcal (${userProfile['activityLevel']} activity)",
-        );
-
-        // 💾 Save meal plan to cache
-        try {
-          final mealPlanJson = meals.map((meal) => meal.toJson()).toList();
-          await HiveService.saveTodaysMealPlan(mealPlanJson);
-          print("💾 Meal plan saved to cache for today");
-        } catch (e) {
-          print("⚠️ Failed to save meal plan to cache: $e");
-        }
-
-        return meals;
-      } catch (e) {
-        print("⚠️ JSON parse error: $e");
-        print(
-          "🔍 Raw output (first 200 chars): ${rawOutput.substring(0, rawOutput.length.clamp(0, 200))}",
-        );
-        return [];
-      }
+    final output = StringBuffer();
+    await for (final token in _controller!.generate(
+      prompt: prompt,
+      maxTokens: 900,
+      temperature: 0.3,
+    )) {
+      output.write(token);
     }
 
-    // ✅ Default return in case no condition above triggers
-    return [];
+    final meals = _parseMealPlanJson(output.toString().trim());
+    if (meals.isEmpty) return [];
+
+    try {
+      final mealPlanJson = meals.map((meal) => meal.toJson()).toList();
+      await HiveService.saveTodaysMealPlan(mealPlanJson);
+    } catch (e) {
+      debugPrint('[LLM] Failed to cache meal plan: $e');
+    }
+
+    return meals;
+  }
+
+  List<Meal> _loadCachedMeals() {
+    try {
+      final cachedMealPlan = HiveService.getTodaysMealPlan();
+      if (cachedMealPlan == null) return [];
+      final meals = <Meal>[];
+      for (final mealJson in cachedMealPlan) {
+        meals.add(Meal.fromJson(Map<String, dynamic>.from(mealJson)));
+      }
+      return meals;
+    } catch (e) {
+      debugPrint('[LLM] Cache load error: $e');
+      return [];
+    }
+  }
+
+  List<Meal> _parseMealPlanJson(String rawOutput) {
+    try {
+      String cleaned = rawOutput;
+      if (cleaned.contains('```json')) {
+        final startIndex = cleaned.indexOf('```json') + 7;
+        final endIndex = cleaned.indexOf('```', startIndex);
+        cleaned = endIndex != -1
+            ? cleaned.substring(startIndex, endIndex)
+            : cleaned.substring(startIndex);
+      } else if (cleaned.contains('```')) {
+        final startIndex = cleaned.indexOf('```') + 3;
+        final endIndex = cleaned.indexOf('```', startIndex);
+        cleaned = endIndex != -1
+            ? cleaned.substring(startIndex, endIndex)
+            : cleaned.substring(startIndex);
+      }
+      cleaned = cleaned.trim();
+
+      int start = cleaned.indexOf('[');
+      int end = -1;
+      if (start != -1) {
+        int bracketCount = 0;
+        for (int i = start; i < cleaned.length; i++) {
+          if (cleaned[i] == '[') bracketCount++;
+          if (cleaned[i] == ']') {
+            bracketCount--;
+            if (bracketCount == 0) {
+              end = i;
+              break;
+            }
+          }
+        }
+      }
+      if (start == -1 || end == -1) return [];
+
+      final parsed = jsonDecode(cleaned.substring(start, end + 1));
+      if (parsed is! List) return [];
+
+      final meals = <Meal>[];
+      for (final mealData in parsed) {
+        if (mealData is Map<String, dynamic>) {
+          meals.add(Meal.fromJson(mealData));
+        }
+      }
+      return meals;
+    } catch (e) {
+      debugPrint('[LLM] Meal JSON parse error: $e');
+      return [];
+    }
   }
 
   String _calculateTargetCalories(Map<String, dynamic>? userProfile) {
@@ -338,53 +426,6 @@ Return only the JSON array, no markdown, no explanations.
     return "$lowerRange-$upperRange";
   }
 
-  Future<String?> _findDownloadedModel() async {
-    try {
-      // Check download tasks first
-      final tasks = await FlutterDownloader.loadTasks();
-      if (tasks != null &&
-          tasks.isNotEmpty &&
-          tasks.last.status == DownloadTaskStatus.complete) {
-        for (final task in tasks) {
-          if (task.status == DownloadTaskStatus.complete &&
-              (task.filename?.contains('gemma') ?? false) &&
-              (task.filename?.endsWith('.gguf') ?? false)) {
-            final modelPath = '${task.savedDir}/${task.filename}';
-            final file = File(modelPath);
-            if (await file.exists()) {
-              final fileSize = await file.length();
-              final fileSizeMB = (fileSize / (1024 * 1024)).toStringAsFixed(1);
-              debugPrint("✅ Found model file: $modelPath (${fileSizeMB}MB)");
-              return modelPath;
-            }
-          }
-        }
-      }
-
-      // Fallback: check documents directory
-      final dir = await getApplicationDocumentsDirectory();
-      debugPrint("🔍 Checking directory: ${dir.path}");
-
-      final dirContents = await dir.list().toList();
-      for (final item in dirContents) {
-        if (item is File) {
-          final fileName = item.path.split('/').last.split('\\').last;
-          if (fileName.contains('gemma') && fileName.endsWith('.gguf')) {
-            final fileSize = await item.length();
-            final fileSizeMB = (fileSize / (1024 * 1024)).toStringAsFixed(1);
-            debugPrint("✅ Found model file: ${item.path} (${fileSizeMB}MB)");
-            return item.path;
-          }
-        }
-      }
-
-      return null;
-    } catch (e) {
-      debugPrint("Error finding model: $e");
-      return null;
-    }
-  }
-
   Future<String?> textSearch() async {
     try {
       final userProfile = ref.read(userProfileProvider);
@@ -441,10 +482,10 @@ Return only the JSON array, no markdown, no explanations.
         return null;
       }
 
-      // ✅ Parse HTML properly
+      // Parse HTML properly
       final document = html_parser.parse(response.body);
 
-      // ✅ Remove unwanted elements
+      // Remove unwanted elements
       document
           .querySelectorAll(
             'script, style, nav, header, footer, aside, .ad, .advertisement, .social-share, .comments, .cookie-banner',
@@ -453,7 +494,7 @@ Return only the JSON array, no markdown, no explanations.
             element.remove();
           });
 
-      // ✅ Try to find main content area
+      // Try to find main content area
       final mainContent =
           document.querySelector('article') ??
           document.querySelector('main') ??
@@ -469,7 +510,7 @@ Return only the JSON array, no markdown, no explanations.
         return null;
       }
 
-      // ✅ Extract text from paragraphs and headings only
+      // Extract text from paragraphs and headings only
       final contentParts = <String>[];
       for (var element in mainContent.querySelectorAll(
         'p, h1, h2, h3, h4, h5, h6, li',
@@ -487,7 +528,7 @@ Return only the JSON array, no markdown, no explanations.
         return null;
       }
 
-      // ✅ Join and limit
+      // Join and limit
       final extractedText = contentParts.join('\n\n');
       final finalText = extractedText.length > 3000
           ? '${extractedText.substring(0, 3000)}...'

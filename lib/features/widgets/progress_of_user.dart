@@ -1,19 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-
+import 'package:upgrade/services/daily_goals_service.dart';
 import 'dart:math' as math;
 
-import 'package:upgrade/services/daily_goals_service.dart';
-import 'package:upgrade/providers/health_provider.dart';
-
-class ProgresssOfUSer extends ConsumerStatefulWidget {
+class ProgresssOfUSer extends StatefulWidget {
   const ProgresssOfUSer({super.key});
 
   @override
-  ConsumerState<ProgresssOfUSer> createState() => _ProgresssOfUSerState();
+  State<ProgresssOfUSer> createState() => _ProgresssOfUSerState();
 }
 
-class _ProgresssOfUSerState extends ConsumerState<ProgresssOfUSer>
+class _ProgresssOfUSerState extends State<ProgresssOfUSer>
     with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _animation;
@@ -45,22 +41,11 @@ class _ProgresssOfUSerState extends ConsumerState<ProgresssOfUSer>
 
   @override
   Widget build(BuildContext context) {
-    // Water & workout: always from local tracking
+    // Calculate overall progress
     final waterProgress = DailyGoalsService.getWaterProgress();
+    final stepsProgress = DailyGoalsService.getStepsProgress();
+    final caloriesProgress = DailyGoalsService.getCaloriesProgress();
     final workoutProgress = DailyGoalsService.getWorkoutProgress();
-
-    // Steps & calories: prefer wearable data if connected
-    final vitals = ref.watch(healthVitalsProvider).value;
-    double stepsProgress;
-    double caloriesProgress;
-
-    if (vitals != null && vitals.isConnected) {
-      stepsProgress = vitals.stepsProgress;
-      caloriesProgress = vitals.caloriesProgress;
-    } else {
-      stepsProgress = DailyGoalsService.getStepsProgress();
-      caloriesProgress = DailyGoalsService.getCaloriesProgress();
-    }
 
     final overallProgress =
         (waterProgress + stepsProgress + caloriesProgress + workoutProgress) /

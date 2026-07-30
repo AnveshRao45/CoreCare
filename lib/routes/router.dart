@@ -1,6 +1,7 @@
 import 'package:page_transition/page_transition.dart';
 import 'package:flutter/material.dart';
 import 'package:upgrade/features/home.dart';
+import 'package:upgrade/features/onboarding/onboarding.dart';
 import 'package:upgrade/features/search.dart';
 import 'package:upgrade/features/chat_screen.dart';
 import 'package:upgrade/routes/routes.dart';
@@ -18,6 +19,8 @@ class AppRouter {
       return pageTransition(const HomeScreen());
     } else if (route.name == AppRoutes.searchScreen.path) {
       return pageTransition(const SearchScreen());
+    } else if (route.name == AppRoutes.onboardingScreen.path) {
+      return pageTransition(const OnboardingFlow());
     } else {
       return MaterialPageRoute(
         builder: (_) => const Scaffold(

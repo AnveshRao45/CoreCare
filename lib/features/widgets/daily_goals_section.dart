@@ -1,23 +1,65 @@
 import 'package:flutter/material.dart';
+// import 'package:flutter_health_connect/flutter_health_connect.dart';
 import 'dart:math' as math;
+import 'package:upgrade/services/daily_goals_service.dart';
 
-class DailyGoalsSection extends StatelessWidget {
+class DailyGoalsSection extends StatefulWidget {
   const DailyGoalsSection({super.key});
 
   @override
+  State<DailyGoalsSection> createState() => _DailyGoalsSectionState();
+}
+
+class _DailyGoalsSectionState extends State<DailyGoalsSection> {
+  @override
+  void initState() {
+    super.initState();
+    // Refresh data when widget is created
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // Get real progress data
+    final waterProgress = DailyGoalsService.getWaterProgress();
+    final waterProgressString = DailyGoalsService.getWaterProgressString();
+
+    final stepsProgress = DailyGoalsService.getStepsProgress();
+    final stepsProgressString = DailyGoalsService.getStepsProgressString();
+
+    final workoutProgress = DailyGoalsService.getWorkoutProgress();
+    final workoutProgressString = DailyGoalsService.getWorkoutProgressString();
+
+    final caloriesProgress = DailyGoalsService.getCaloriesProgress();
+    final caloriesProgressString =
+        DailyGoalsService.getCaloriesProgressString();
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            "My Daily Goals",
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF2C2C2C),
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                "My Daily Goals",
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF2C2C2C),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: () {
+                  setState(() {});
+                },
+                tooltip: 'Refresh goals',
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           Container(
@@ -45,10 +87,10 @@ class DailyGoalsSection extends StatelessWidget {
                     children: [
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: const [
+                        children: [
                           GoalCircle(
-                            progress: 0.25,
-                            gradient: LinearGradient(
+                            progress: waterProgress,
+                            gradient: const LinearGradient(
                               colors: [Color(0xFF42A5F5), Color(0xFF1E88E5)],
                               begin: Alignment.topCenter,
                               end: Alignment.bottomCenter,
@@ -56,11 +98,11 @@ class DailyGoalsSection extends StatelessWidget {
                             icon: Icons.water_drop,
                             iconColor: Colors.blue,
                             label: "Water",
-                            sublabel: "2/8 glasses",
+                            sublabel: waterProgressString,
                           ),
                           GoalCircle(
-                            progress: 0.5,
-                            gradient: LinearGradient(
+                            progress: stepsProgress,
+                            gradient: const LinearGradient(
                               colors: [Color(0xFF66BB6A), Color(0xFF43A047)],
                               begin: Alignment.topCenter,
                               end: Alignment.bottomCenter,
@@ -68,17 +110,17 @@ class DailyGoalsSection extends StatelessWidget {
                             icon: Icons.directions_walk,
                             iconColor: Colors.green,
                             label: "Steps",
-                            sublabel: "5k/10k",
+                            sublabel: stepsProgressString,
                           ),
                         ],
                       ),
                       const SizedBox(height: 20),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: const [
+                        children: [
                           GoalCircle(
-                            progress: 1.0,
-                            gradient: LinearGradient(
+                            progress: workoutProgress,
+                            gradient: const LinearGradient(
                               colors: [Color(0xFFBA68C8), Color(0xFF8E24AA)],
                               begin: Alignment.topCenter,
                               end: Alignment.bottomCenter,
@@ -86,11 +128,11 @@ class DailyGoalsSection extends StatelessWidget {
                             icon: Icons.fitness_center,
                             iconColor: Colors.purple,
                             label: "Workout",
-                            sublabel: "1/1 done",
+                            sublabel: workoutProgressString,
                           ),
                           GoalCircle(
-                            progress: 0.9,
-                            gradient: LinearGradient(
+                            progress: caloriesProgress,
+                            gradient: const LinearGradient(
                               colors: [Color(0xFFFFB74D), Color(0xFFF57C00)],
                               begin: Alignment.topCenter,
                               end: Alignment.bottomCenter,
@@ -98,93 +140,7 @@ class DailyGoalsSection extends StatelessWidget {
                             icon: Icons.local_fire_department,
                             iconColor: Colors.orange,
                             label: "Calories",
-                            sublabel: "1800/2000",
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  const Divider(color: Colors.white70, thickness: 1),
-                  const SizedBox(height: 16),
-                  const Text(
-                    "Nutritional Goals",
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                      color: Color(0xFF2C2C2C),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  // Nutritional Grid
-                  Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: const [
-                          Expanded(
-                            child: NutrientGoal(
-                              progress: 0.6,
-                              gradient: LinearGradient(
-                                colors: [Color(0xFFAB47BC), Color(0xFF7B1FA2)],
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                              ),
-                              icon: Icons.grain,
-                              iconColor: Colors.purple,
-                              title: "Carbs",
-                              subtitle: "150 / 250 g",
-                            ),
-                          ),
-                          SizedBox(width: 16),
-                          Expanded(
-                            child: NutrientGoal(
-                              progress: 0.75,
-                              gradient: LinearGradient(
-                                colors: [Color(0xFF26A69A), Color(0xFF00897B)],
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                              ),
-                              icon: Icons.egg,
-                              iconColor: Colors.teal,
-                              title: "Proteins",
-                              subtitle: "90 / 120 g",
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: const [
-                          Expanded(
-                            child: NutrientGoal(
-                              progress: 0.45,
-                              gradient: LinearGradient(
-                                colors: [Color(0xFFFFCA28), Color(0xFFFFA000)],
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                              ),
-                              icon: Icons.oil_barrel,
-                              iconColor: Colors.amber,
-                              title: "Fats",
-                              subtitle: "45 / 60 g",
-                            ),
-                          ),
-                          SizedBox(width: 16),
-                          Expanded(
-                            child: NutrientGoal(
-                              progress: 0.8,
-                              gradient: LinearGradient(
-                                colors: [Color(0xFF81C784), Color(0xFF388E3C)],
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                              ),
-                              icon: Icons.eco,
-                              iconColor: Colors.green,
-                              title: "Fiber",
-                              subtitle: "24 / 30 g",
-                            ),
+                            sublabel: caloriesProgressString,
                           ),
                         ],
                       ),
@@ -364,67 +320,6 @@ class CaloriesGoal extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class NutrientGoal extends StatelessWidget {
-  final double progress;
-  final LinearGradient gradient;
-  final IconData icon;
-  final Color iconColor;
-  final String title;
-  final String subtitle;
-
-  const NutrientGoal({
-    super.key,
-    required this.progress,
-    required this.gradient,
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.subtitle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 40,
-          height: 40,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              CustomPaint(
-                size: const Size(40, 40),
-                painter: CirclePainter(progress: progress, gradient: gradient),
-              ),
-              Icon(icon, color: iconColor, size: 20),
-            ],
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF2C2C2C),
-                  fontSize: 14,
-                ),
-              ),
-              Text(
-                subtitle,
-                style: const TextStyle(fontSize: 12, color: Color(0xFF757575)),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }

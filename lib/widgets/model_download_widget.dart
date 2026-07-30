@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_downloader/flutter_downloader.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:upgrade/services/model_storage_service.dart';
 
 @pragma('vm:entry-point')
 class ModelDownloadWidget extends StatefulWidget {
@@ -158,6 +159,17 @@ class _ModelDownloadWidgetState extends State<ModelDownloadWidget> {
   // 🔹 Check if LLM model is available locally
   Future<void> _checkLLMAvailability() async {
     try {
+      // Fast path: unified model locator (handles Windows paths + folder scan)
+      final located = await ModelStorageService.findGgufModel();
+      if (located != null) {
+        setState(() {
+          _isLLMAvailable = true;
+          _modelFilePath = located;
+        });
+        widget.onModelAvailable?.call();
+        return;
+      }
+
       // First, check if we have any completed download tasks and use their path
       final tasks = await FlutterDownloader.loadTasks();
       String? actualDownloadPath;
@@ -595,7 +607,8 @@ class _ModelDownloadWidgetState extends State<ModelDownloadWidget> {
                 ),
               ] else if (!_isLLMAvailable &&
                   (_status == null ||
-                      _status == DownloadTaskStatus.failed)) ...[
+                      _status == DownloadTaskStatus.failed ||
+                      _status == DownloadTaskStatus.canceled)) ...[
                 // Model not available - show download button
                 Expanded(
                   child: ElevatedButton.icon(

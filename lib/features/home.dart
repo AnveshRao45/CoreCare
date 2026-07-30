@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_downloader/flutter_downloader.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:upgrade/providers/llm_pro.dart';
 import 'package:upgrade/providers/user_provider.dart';
 import 'package:upgrade/routes/routes.dart';
+import 'package:upgrade/services/hive_service.dart';
 import '../models/meal.dart';
 import '../widgets/model_download_widget.dart';
 import '../llm_model_check.dart';
@@ -14,9 +16,10 @@ import 'widgets/greeting_header.dart';
 import 'widgets/daily_goals_section.dart';
 import 'widgets/workouts_section.dart';
 import 'widgets/vitals_section.dart';
+import 'widgets/progress_of_user.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
-  static const id = AppRoutes.loginScreen;
+  static const id = AppRoutes.homeScreen;
   const HomeScreen({super.key});
 
   @override
@@ -24,17 +27,13 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  late List<Meal> meals;
   String userName = 'User';
-  bool _isModelAvailable = false;
-  bool _isCheckingModel = true;
+  int _refreshKey = 0; // Key to force rebuild of DailyGoalsSection
 
   @override
   void initState() {
     super.initState();
-    meals = Meal.getMealData();
     _loadUserData();
-    _checkModelAvailability();
   }
 
   void _loadUserData() {
@@ -42,59 +41,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     userName = userProfile.build()!.name.toString();
   }
 
-  Future<void> _checkModelAvailability() async {
+  void _refreshDailyGoals() {
+    // Force rebuild of DailyGoalsSection by changing key
     setState(() {
-      _isCheckingModel = true;
+      _refreshKey++;
     });
-
-    try {
-      final modelPath = await _findDownloadedModel();
-      setState(() {
-        _isModelAvailable = modelPath != null;
-        _isCheckingModel = false;
-      });
-    } catch (e) {
-      setState(() {
-        _isModelAvailable = false;
-        _isCheckingModel = false;
-      });
-    }
-  }
-
-  Future<String?> _findDownloadedModel() async {
-    try {
-      // Check download tasks first
-      final tasks = await FlutterDownloader.loadTasks();
-      if (tasks != null && tasks.isNotEmpty) {
-        for (final task in tasks) {
-          if (task.status == DownloadTaskStatus.complete &&
-              (task.filename?.contains('gemma') ?? false) &&
-              (task.filename?.endsWith('.gguf') ?? false)) {
-            final modelPath = '${task.savedDir}/${task.filename}';
-            final file = File(modelPath);
-            if (await file.exists()) {
-              return modelPath;
-            }
-          }
-        }
-      }
-
-      // Fallback: check documents directory
-      final dir = await getApplicationDocumentsDirectory();
-      final dirContents = await dir.list().toList();
-      for (final item in dirContents) {
-        if (item is File) {
-          final fileName = item.path.split('/').last.split('\\').last;
-          if (fileName.contains('gemma') && fileName.endsWith('.gguf')) {
-            return item.path;
-          }
-        }
-      }
-
-      return null;
-    } catch (e) {
-      return null;
-    }
   }
 
   String _getGreeting() {
@@ -108,12 +59,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
-  void _onModelAvailable() {
-    _checkModelAvailability();
-  }
-
   @override
   Widget build(BuildContext context) {
+    // Debug: Check cache status
+
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       body: SafeArea(
@@ -123,62 +72,119 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 24),
-                GreetingHeader(
-                  greeting: _getGreeting(),
-                  name: '$userName!',
-                  subtitle: 'Ready to conquer your\ngoals?',
-                ),
-                const SizedBox(height: 28),
-                Text(
-                  "Your Meal plan",
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF2D3748),
-                  ),
-                ),
                 const SizedBox(height: 20),
-                _buildMealPlanSection(),
-                const SizedBox(height: 28),
-                const DailyGoalsSection(),
-                const SizedBox(height: 28),
-                const WorkoutsSection(),
-                const SizedBox(height: 28),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          GreetingHeader(
+                            greeting: _getGreeting(),
+                            name: '$userName!',
+                            subtitle: 'Ready to conquer your\ngoals?',
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            "Your Meal plan",
+                            style: TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF2D3748),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 16,
+                      ),
+                      child: ProgresssOfUSer(key: ValueKey(_refreshKey)),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 16),
+                FutureBuilder<List<Meal>?>(
+                  future: ref.read(llmProvider.notifier).generateMealPlan(),
+                  builder: (context, snapshot) {
+                    final state = ref.read(llmProvider).isLoaded;
+
+                    if (!state) {
+                      return ModelDownloadWidget();
+                    } else if (snapshot.connectionState ==
+                        ConnectionState.waiting) {
+                      return _buildLoadingWidget();
+                    } else if (snapshot.hasError) {
+                      return _buildErrorWidget(snapshot.error.toString());
+                    } else if (snapshot.hasData && snapshot.data != null) {
+                      return _buildMealPlanSection(snapshot.data!);
+                    } else {
+                      return SizedBox();
+                    }
+                    //  else {
+                    //   return _buildDownloadPromptWidget();
+                    // }
+                  },
+                ),
+                const SizedBox(height: 24),
+                DailyGoalsSection(key: ValueKey(_refreshKey)),
+                const SizedBox(height: 24),
+                WorkoutsSection(onWorkoutCompleted: _refreshDailyGoals),
+                const SizedBox(height: 24),
                 const VitalsSection(),
-                const SizedBox(height: 28),
-                // AI Model Download Section
-                if (!_isModelAvailable)
-                  ModelDownloadWidget(onModelAvailable: _onModelAvailable),
                 const SizedBox(height: 24),
               ],
             ),
           ),
         ),
       ),
-      floatingActionButton: _isModelAvailable
-          ? FloatingActionButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const LlamaDemo()),
-                );
-              },
-              backgroundColor: const Color(0xFFFF8A50),
-              child: const Icon(Icons.chat_bubble_outline, color: Colors.white),
-            )
-          : null,
     );
   }
 
-  Widget _buildMealPlanSection() {
-    if (_isCheckingModel) {
-      return _buildLoadingWidget();
-    } else if (_isModelAvailable) {
-      return MealCarousel(meals: meals, onMealLog: _handleMealLog);
-    } else {
-      return _buildDownloadPromptWidget();
-    }
+  Widget _buildMealPlanSection(List<Meal> meals) {
+    return MealCarousel(meals: meals, onMealLog: _handleMealLog);
+  }
+
+  Widget _buildErrorWidget(String error) {
+    return Container(
+      height: 200,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red, size: 48),
+            const SizedBox(height: 16),
+            const Text(
+              'Error generating meal plan',
+              style: TextStyle(fontSize: 16, color: Color(0xFF64748B)),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              error,
+              style: const TextStyle(fontSize: 12, color: Colors.red),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildLoadingWidget() {
@@ -281,8 +287,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ),
           const SizedBox(height: 20),
-          ModelDownloadWidget(onModelAvailable: _onModelAvailable),
 
+          // ModelDownloadWidget(onModelAvailable: _onModelAvailable),
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(12),

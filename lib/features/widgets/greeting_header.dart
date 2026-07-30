@@ -18,42 +18,31 @@ class GreetingHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  greeting,
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF2D3748),
-                  ),
+      child: 
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                greeting,
+                style: const TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF2D3748),
                 ),
-                Text(
-                  name,
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF2D3748),
-                  ),
+              ),
+              Text(
+                name,
+                style: const TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF2D3748),
                 ),
-                const SizedBox(height: 8),
-                // Text(
-                //   subtitle,
-                //   style: const TextStyle(
-                //     fontSize: 16,
-                //     color: Color(0xFF9CA3AF),
-                //     height: 1.4,
-                //   ),
-                // ),
-              ],
-            ),
+              ),
+             
+           
+            ],
           ),
-          const SizedBox(width: 16),
+       
           // GestureDetector(
           //   onTap: onCustomizeTap,
           //   child: Container(
@@ -86,8 +75,7 @@ class GreetingHeader extends StatelessWidget {
           //     ),
           //   ),
           // ),
-        ],
-      ),
+      
     );
   }
 }

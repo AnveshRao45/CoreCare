@@ -25,9 +25,7 @@ class HiveService {
 
   static Future<void> saveUserProfile(UserProfile profile) async {
     profile.updatedAt = DateTime.now();
-    if (profile.createdAt == null) {
-      profile.createdAt = DateTime.now();
-    }
+    profile.createdAt ??= DateTime.now();
     await _userProfileBox.put('current_user', profile);
   }
 
@@ -77,6 +75,190 @@ class HiveService {
   static T? getDailyData<T>(String key, {T? defaultValue}) {
     final today = DateTime.now().toIso8601String().split('T')[0];
     return _dailyDataBox.get('${today}_$key', defaultValue: defaultValue) as T?;
+  }
+
+  // Meal Plan Operations
+  static Future<void> saveTodaysMealPlan(
+    List<Map<String, dynamic>> mealPlanJson,
+  ) async {
+    final today = DateTime.now().toIso8601String().split('T')[0];
+    try {
+      // Ensure we're storing the data in the correct format
+      final List<Map<String, dynamic>> cleanedData = mealPlanJson.map((meal) {
+        return Map<String, dynamic>.from(meal);
+      }).toList();
+
+      await _dailyDataBox.put('${today}_meal_plan', cleanedData);
+      await _dailyDataBox.put(
+        '${today}_meal_plan_generated_at',
+        DateTime.now().toIso8601String(),
+      );
+      print("💾 Meal plan saved successfully for $today");
+    } catch (e) {
+      print("❌ Error saving meal plan: $e");
+      throw e;
+    }
+  }
+
+  static List<Map<String, dynamic>>? getTodaysMealPlan() {
+    final today = DateTime.now().toIso8601String().split('T')[0];
+    final mealPlan = _dailyDataBox.get('${today}_meal_plan');
+    if (mealPlan != null) {
+      print("📱 Retrieved cached meal plan for $today");
+      print("🔍 Meal plan type: ${mealPlan.runtimeType}");
+      if (mealPlan is List && mealPlan.isNotEmpty) {
+        print("🔍 First item type: ${mealPlan.first.runtimeType}");
+      }
+
+      try {
+        // Validate data structure first
+        if (!isValidMealPlanData(mealPlan)) {
+          print("❌ Invalid meal plan data structure, clearing cache");
+          clearTodaysMealPlan();
+          return null;
+        }
+
+        // Convert List<dynamic> to List<Map<String, dynamic>>
+        final List<dynamic> dynamicList = List<dynamic>.from(mealPlan);
+        final List<Map<String, dynamic>> result = [];
+
+        for (final item in dynamicList) {
+          if (item is Map<dynamic, dynamic>) {
+            // Recursively convert all nested maps
+            final Map<String, dynamic> convertedMap = _convertMapRecursively(
+              item,
+            );
+            result.add(convertedMap);
+          } else if (item is Map<String, dynamic>) {
+            // Already correct type
+            result.add(item);
+          } else if (item is Map) {
+            // Generic Map, convert to Map<dynamic, dynamic> first
+            final Map<dynamic, dynamic> dynamicMap = Map<dynamic, dynamic>.from(
+              item,
+            );
+            final Map<String, dynamic> convertedMap = _convertMapRecursively(
+              dynamicMap,
+            );
+            result.add(convertedMap);
+          } else {
+            throw Exception('Invalid meal plan item type: ${item.runtimeType}');
+          }
+        }
+        return result;
+      } catch (e) {
+        print("❌ Error converting cached meal plan: $e");
+        print("🧹 Clearing corrupted cache...");
+        clearTodaysMealPlan();
+        return null;
+      }
+    }
+    print("❌ No cached meal plan found for $today");
+    return null;
+  }
+
+  // Recursively convert Map<dynamic, dynamic> to Map<String, dynamic>
+  static Map<String, dynamic> _convertMapRecursively(
+    Map<dynamic, dynamic> map,
+  ) {
+    final Map<String, dynamic> result = {};
+
+    for (final entry in map.entries) {
+      final String key = entry.key.toString();
+      final dynamic value = entry.value;
+
+      if (value is Map<dynamic, dynamic>) {
+        result[key] = _convertMapRecursively(value);
+      } else if (value is List) {
+        result[key] = value.map((item) {
+          if (item is Map<dynamic, dynamic>) {
+            return _convertMapRecursively(item);
+          }
+          return item;
+        }).toList();
+      } else {
+        result[key] = value;
+      }
+    }
+
+    return result;
+  }
+
+  // Validate meal plan data structure
+  static bool isValidMealPlanData(dynamic data) {
+    try {
+      if (data is! List) return false;
+
+      for (final item in data) {
+        if (item is! Map) return false;
+
+        // Try to convert and check required fields
+        final Map<String, dynamic> meal = _convertMapRecursively(
+          item as Map<dynamic, dynamic>,
+        );
+
+        // Check required fields
+        if (!meal.containsKey('name') ||
+            !meal.containsKey('totalCalories') ||
+            !meal.containsKey('items')) {
+          return false;
+        }
+
+        // Check items structure
+        if (meal['items'] is! List) return false;
+        for (final foodItem in meal['items']) {
+          if (foodItem is! Map) return false;
+          if (!foodItem.containsKey('name') ||
+              !foodItem.containsKey('calories')) {
+            return false;
+          }
+        }
+      }
+      return true;
+    } catch (e) {
+      print("❌ Validation error: $e");
+      return false;
+    }
+  }
+
+  static bool hasTodaysMealPlan() {
+    final today = DateTime.now().toIso8601String().split('T')[0];
+    final hasData = _dailyDataBox.containsKey('${today}_meal_plan');
+    print("🔍 Checking for meal plan on $today: $hasData");
+    return hasData;
+  }
+
+  static DateTime? getMealPlanGeneratedTime() {
+    final today = DateTime.now().toIso8601String().split('T')[0];
+    final timeString = _dailyDataBox.get('${today}_meal_plan_generated_at');
+    if (timeString != null) {
+      return DateTime.parse(timeString);
+    }
+    return null;
+  }
+
+  static Future<void> clearTodaysMealPlan() async {
+    final today = DateTime.now().toIso8601String().split('T')[0];
+    await _dailyDataBox.delete('${today}_meal_plan');
+    await _dailyDataBox.delete('${today}_meal_plan_generated_at');
+    print("🗑️ Cleared meal plan cache for $today");
+  }
+
+  // Clear corrupted meal plan data
+  static Future<void> clearCorruptedMealPlan() async {
+    try {
+      final today = DateTime.now().toIso8601String().split('T')[0];
+      final keys = _dailyDataBox.keys
+          .where((key) => key.toString().contains('meal_plan'))
+          .toList();
+
+      for (final key in keys) {
+        await _dailyDataBox.delete(key);
+      }
+      print("🧹 Cleared all meal plan cache data");
+    } catch (e) {
+      print("❌ Error clearing corrupted data: $e");
+    }
   }
 
   static Future<void> saveHistoricalData(

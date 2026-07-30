@@ -16,12 +16,44 @@ class _MealCarouselState extends State<MealCarousel> {
   final PageController _pageController = PageController();
   int _currentIndex = 0;
 
+  // Helper method to get gradient colors based on meal type
+  List<Color> _getGradientColors(String mealName) {
+    switch (mealName.toLowerCase()) {
+      case 'breakfast':
+        return [const Color(0xFFFFB347), const Color(0xFFFF8C42)];
+      case 'lunch':
+        return [const Color(0xFF4ECDC4), const Color(0xFF44A08D)];
+      case 'dinner':
+        return [const Color(0xFF667eea), const Color(0xFF764ba2)];
+      case 'snacks':
+        return [const Color(0xFFf093fb), const Color(0xFFf5576c)];
+      default:
+        return [const Color(0xFFFF8A50), const Color(0xFFFF6B35)];
+    }
+  }
+
+  // Helper method to get illustration URL based on meal type
+  String _getIllustrationUrl(String mealName) {
+    switch (mealName.toLowerCase()) {
+      case 'breakfast':
+        return 'https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?w=400';
+      case 'lunch':
+        return 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400';
+      case 'dinner':
+        return 'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=400';
+      case 'snacks':
+        return 'https://images.unsplash.com/photo-1559054663-e431885ca2eb?w=400';
+      default:
+        return 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
         SizedBox(
-          height: 220,
+          height: 320,
           child: PageView.builder(
             controller: _pageController,
             onPageChanged: (index) {
@@ -34,10 +66,10 @@ class _MealCarouselState extends State<MealCarousel> {
               final meal = widget.meals[index];
               return MealCard(
                 name: meal.name,
-                calories: meal.calories,
+                calories: meal.totalCalories,
                 items: meal.items,
-                gradientColors: meal.gradientColors,
-                illustrationUrl: meal.illustrationUrl,
+                gradientColors: _getGradientColors(meal.name),
+                illustrationUrl: _getIllustrationUrl(meal.name),
                 onLogMeal: () => widget.onMealLog?.call(meal),
               );
             },

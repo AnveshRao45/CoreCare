@@ -8,10 +8,46 @@ final userProfileProvider = StateProvider<UserNotifier>(
 );
 
 class UserNotifier extends Notifier<UserProfile?> {
+  UserProfile? userProfile;
+
   @override
   UserProfile? build() {
-    final user = UserDataService.getCurrentUser();
+    if (userProfile != null) {
+      return userProfile;
+    } else {
+      final user = UserDataService.getCurrentUser();
+      userProfile = user;
+      return user;
+    }
+  }
 
-    return user;
+  Map<String, Object>? userJson() {
+    // Convert user profile to map for the prompt
+    if (userProfile != null) {
+      final userProfileData = {
+        "name": userProfile!.name ?? "User",
+        "age": userProfile!.age ?? 25,
+        "gender": userProfile!.gender ?? "unknown",
+        "weight": userProfile!.weight ?? 70,
+        "height": userProfile!.height ?? 170,
+        "activityLevel": userProfile!.activityLevel ?? "moderate",
+        "dietaryTypes": userProfile!.dietaryTypes.isNotEmpty
+            ? userProfile!.dietaryTypes
+            : ["balanced"],
+        "dietaryRestrictions": userProfile!.dietaryRestrictions.isNotEmpty
+            ? userProfile!.dietaryRestrictions
+            : ["none"],
+        "allergies": userProfile!.allergies ?? "none",
+        "medicalConditions": userProfile!.medicalConditions.isNotEmpty
+            ? userProfile!.medicalConditions
+            : ["none"],
+        "bmi": userProfile!.bmi?.toStringAsFixed(1) ?? "unknown",
+        "bmiCategory": userProfile!.bmiCategory,
+      };
+
+      return userProfileData;
+    } else {
+      return null;
+    }
   }
 }

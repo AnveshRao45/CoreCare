@@ -5,7 +5,12 @@ import 'package:logging/logging.dart';
 import 'package:upgrade/download_screen.dart';
 import 'package:upgrade/features/home.dart';
 import 'package:upgrade/features/onboarding/onboarding.dart';
+import 'package:upgrade/features/splash/splash_screen.dart';
 import 'package:upgrade/llm_model_check.dart';
+import 'package:upgrade/my_llm_screen.dart';
+import 'package:upgrade/pose_detec.dart';
+import 'package:upgrade/routes/navigation.dart';
+import 'package:upgrade/routes/router.dart';
 import 'package:upgrade/services/hive_service.dart';
 
 void main() async {
@@ -48,6 +53,8 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Flutter Demo',
       debugShowCheckedModeBanner: false,
+      navigatorKey: Navigation.instance.navigationKey,
+      onGenerateRoute: AppRouter.generateRoute,
       theme: ThemeData(
         // This is the theme of your application.
         //
@@ -67,7 +74,9 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),
       // home: DownloadScreen(),
-      home: LlamaDemo(),
+      // home: LlamaDemo(),
+      // home: PoseDetectorView(),
+      home: SplashScreen(),
       // home: HiveService.isOnboardingComplete
       //     ? const HomeScreen()
       //     : const OnboardingFlow(),
