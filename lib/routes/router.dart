@@ -1,11 +1,11 @@
 import 'package:page_transition/page_transition.dart';
 import 'package:flutter/material.dart';
+import 'package:upgrade/features/ai_chat_screen.dart';
+import 'package:upgrade/features/edit_profile_screen.dart';
 import 'package:upgrade/features/home.dart';
 import 'package:upgrade/features/onboarding/onboarding.dart';
-import 'package:upgrade/features/search.dart';
-import 'package:upgrade/features/chat_screen.dart';
+import 'package:upgrade/features/recommendations_screen.dart';
 import 'package:upgrade/routes/routes.dart';
-// import 'package:upgrade/features/login.dart'; // assuming you have a LoginScreen
 
 class AppRouter {
   static Route<dynamic> generateRoute(RouteSettings route) {
@@ -17,10 +17,14 @@ class AppRouter {
 
     if (route.name == AppRoutes.homeScreen.path) {
       return pageTransition(const HomeScreen());
-    } else if (route.name == AppRoutes.searchScreen.path) {
-      return pageTransition(const SearchScreen());
+    } else if (route.name == AppRoutes.chatScreen.path) {
+      return pageTransition(const AiChatScreen());
     } else if (route.name == AppRoutes.onboardingScreen.path) {
       return pageTransition(const OnboardingFlow());
+    } else if (route.name == AppRoutes.editProfileScreen.path) {
+      return pageTransition(const EditProfileScreen());
+    } else if (route.name == AppRoutes.recommendationsScreen.path) {
+      return pageTransition(const RecommendationsScreen());
     } else {
       return MaterialPageRoute(
         builder: (_) => const Scaffold(

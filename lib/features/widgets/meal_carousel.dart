@@ -4,9 +4,15 @@ import 'meal_card.dart';
 
 class MealCarousel extends StatefulWidget {
   final List<Meal> meals;
+  final Set<String> loggedMealNames;
   final Function(Meal)? onMealLog;
 
-  const MealCarousel({super.key, required this.meals, this.onMealLog});
+  const MealCarousel({
+    super.key,
+    required this.meals,
+    this.loggedMealNames = const {},
+    this.onMealLog,
+  });
 
   @override
   State<MealCarousel> createState() => _MealCarouselState();
@@ -16,7 +22,6 @@ class _MealCarouselState extends State<MealCarousel> {
   final PageController _pageController = PageController();
   int _currentIndex = 0;
 
-  // Helper method to get gradient colors based on meal type
   List<Color> _getGradientColors(String mealName) {
     switch (mealName.toLowerCase()) {
       case 'breakfast':
@@ -32,7 +37,6 @@ class _MealCarouselState extends State<MealCarousel> {
     }
   }
 
-  // Helper method to get illustration URL based on meal type
   String _getIllustrationUrl(String mealName) {
     switch (mealName.toLowerCase()) {
       case 'breakfast':
@@ -64,13 +68,17 @@ class _MealCarouselState extends State<MealCarousel> {
             itemCount: widget.meals.length,
             itemBuilder: (context, index) {
               final meal = widget.meals[index];
+              final isLogged = widget.loggedMealNames.contains(
+                meal.name.trim().toLowerCase(),
+              );
               return MealCard(
                 name: meal.name,
                 calories: meal.totalCalories,
                 items: meal.items,
                 gradientColors: _getGradientColors(meal.name),
                 illustrationUrl: _getIllustrationUrl(meal.name),
-                onLogMeal: () => widget.onMealLog?.call(meal),
+                isLogged: isLogged,
+                onLogMeal: isLogged ? null : () => widget.onMealLog?.call(meal),
               );
             },
           ),

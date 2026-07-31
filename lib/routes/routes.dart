@@ -1,19 +1,9 @@
 enum AppRoutes {
-  onboardingScreen("onboarding_screen"),
-  otpScreen("otp_screen"),
-  loginScreen("login_screen"),
-  carModelsScreen("car_models"),
-  homeScreen("home_screen"),
-  orderStatScreen('order_stat_screen'),
-  ordersScreen('orders_screen'),
-  aboutScreen('about_screen'),
-  serviceDetScreen('service_det_screen'),
-  scheduleScreen('schedule_screen'),
-  locationScreen('location_screen'),
-  paymentScreen('payment_screen'),
-  carCompScreen("car_comp_screem"),
-  searchScreen('search_screen'),
-  chatScreen('chat_screen');
+  onboardingScreen('onboarding_screen'),
+  homeScreen('home_screen'),
+  chatScreen('chat_screen'),
+  editProfileScreen('edit_profile_screen'),
+  recommendationsScreen('recommendations_screen');
 
   const AppRoutes(this.path);
 

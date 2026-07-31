@@ -7,8 +7,10 @@ import 'steps/health_wellness_step.dart';
 import '../../models/user_profile.dart';
 import '../../services/hive_service.dart';
 import '../home.dart';
+import '../../routes/routes.dart';
 
 class OnboardingFlow extends StatefulWidget {
+  static const id = AppRoutes.onboardingScreen;
   const OnboardingFlow({super.key});
 
   @override
@@ -74,13 +76,45 @@ class _OnboardingFlowState extends State<OnboardingFlow>
   }
 
   void _nextStep() {
+    final error = _validateStep(currentStep);
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error), backgroundColor: Colors.orange),
+      );
+      return;
+    }
     if (currentStep < 3) {
-      setState(() {
-        currentStep++;
-      });
+      setState(() => currentStep++);
       _updateProgress();
     } else {
       _completeOnboarding();
+    }
+  }
+
+  String? _validateStep(int step) {
+    switch (step) {
+      case 0:
+        if (nameController.text.trim().isEmpty) return 'Please enter your name';
+        if (int.tryParse(ageController.text) == null) return 'Enter a valid age';
+        if (double.tryParse(heightController.text) == null) {
+          return 'Enter a valid height (cm)';
+        }
+        if (double.tryParse(weightController.text) == null) {
+          return 'Enter a valid weight (kg)';
+        }
+        return null;
+      case 1:
+        if (selectedDietaryTypes.isEmpty) {
+          return 'Select at least one diet type';
+        }
+        return null;
+      case 2:
+        return null;
+      case 3:
+        if (activityLevel.isEmpty) return 'Select your activity level';
+        return null;
+      default:
+        return null;
     }
   }
 

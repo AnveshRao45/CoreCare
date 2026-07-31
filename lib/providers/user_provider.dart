@@ -1,10 +1,12 @@
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:upgrade/models/user_profile.dart';
 import 'package:upgrade/services/user_data_service.dart';
 
-final userProfileProvider = StateProvider<UserNotifier>(
-  (ref) => UserNotifier(),
+
+final userProfileProvider = NotifierProvider<UserNotifier, UserProfile?>(
+  () => UserNotifier(),
 );
 
 class UserNotifier extends Notifier<UserProfile?> {
@@ -22,7 +24,6 @@ class UserNotifier extends Notifier<UserProfile?> {
   }
 
   Map<String, Object>? userJson() {
-    // Convert user profile to map for the prompt
     if (userProfile != null) {
       final userProfileData = {
         "name": userProfile!.name ?? "User",
@@ -49,5 +50,10 @@ class UserNotifier extends Notifier<UserProfile?> {
     } else {
       return null;
     }
+  }
+
+  void refresh() {
+    userProfile = UserDataService.getCurrentUser();
+    state = userProfile;
   }
 }

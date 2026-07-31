@@ -8,6 +8,7 @@ class MealCard extends StatelessWidget {
   final List<FoodItem> items;
   final List<Color> gradientColors;
   final String illustrationUrl;
+  final bool isLogged;
   final VoidCallback? onLogMeal;
 
   const MealCard({
@@ -17,6 +18,7 @@ class MealCard extends StatelessWidget {
     required this.items,
     required this.gradientColors,
     required this.illustrationUrl,
+    this.isLogged = false,
     this.onLogMeal,
   });
 
@@ -202,10 +204,14 @@ class MealCard extends StatelessWidget {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: onLogMeal,
+                        onPressed: isLogged ? null : onLogMeal,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: gradientColors[0],
+                          backgroundColor: isLogged
+                              ? Colors.green.shade600
+                              : gradientColors[0],
                           foregroundColor: Colors.white,
+                          disabledBackgroundColor: Colors.green.shade600,
+                          disabledForegroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 6),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
@@ -213,19 +219,21 @@ class MealCard extends StatelessWidget {
                           elevation: 1,
                           minimumSize: const Size(double.infinity, 32),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
-                              Icons.add_circle_outline,
+                              isLogged
+                                  ? Icons.check_circle
+                                  : Icons.add_circle_outline,
                               size: 14,
                               color: Colors.white,
                             ),
-                            SizedBox(width: 4),
+                            const SizedBox(width: 4),
                             Text(
-                              "Log Meal",
-                              style: TextStyle(
+                              isLogged ? 'Logged' : 'Log Meal',
+                              style: const TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
                                 color: Colors.white,

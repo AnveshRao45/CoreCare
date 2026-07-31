@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:upgrade/services/daily_goals_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'dart:math' as math;
 
-class ProgresssOfUSer extends StatefulWidget {
+import 'package:upgrade/providers/user_provider.dart';
+import 'package:upgrade/services/daily_goals_service.dart';
+import 'package:upgrade/providers/health_provider.dart';
+
+class ProgresssOfUSer extends ConsumerStatefulWidget {
   const ProgresssOfUSer({super.key});
 
   @override
-  State<ProgresssOfUSer> createState() => _ProgresssOfUSerState();
+  ConsumerState<ProgresssOfUSer> createState() => _ProgresssOfUSerState();
 }
 
-class _ProgresssOfUSerState extends State<ProgresssOfUSer>
+class _ProgresssOfUSerState extends ConsumerState<ProgresssOfUSer>
     with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _animation;
@@ -41,15 +46,19 @@ class _ProgresssOfUSerState extends State<ProgresssOfUSer>
 
   @override
   Widget build(BuildContext context) {
-    // Calculate overall progress
+    final user = ref.watch(userProfileProvider);
     final waterProgress = DailyGoalsService.getWaterProgress();
-    final stepsProgress = DailyGoalsService.getStepsProgress();
-    final caloriesProgress = DailyGoalsService.getCaloriesProgress();
     final workoutProgress = DailyGoalsService.getWorkoutProgress();
+    final intakeProgress = DailyGoalsService.getCaloriesEatenProgress(user);
+
+    final vitals = ref.watch(healthVitalsProvider).value;
+    final stepsProgress = vitals != null && vitals.isConnected
+        ? vitals.stepsProgress
+        : DailyGoalsService.getStepsProgress();
 
     final overallProgress =
-        (waterProgress + stepsProgress + caloriesProgress + workoutProgress) /
-        4.0;
+        (waterProgress + stepsProgress + intakeProgress + workoutProgress) /
+            4.0;
 
     final progressColor = _getProgressColor(overallProgress);
 

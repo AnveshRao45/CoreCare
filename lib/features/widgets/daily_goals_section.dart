@@ -1,40 +1,49 @@
 import 'package:flutter/material.dart';
-// import 'package:flutter_health_connect/flutter_health_connect.dart';
-import 'dart:math' as math;
-import 'package:upgrade/services/daily_goals_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class DailyGoalsSection extends StatefulWidget {
+import 'package:upgrade/providers/user_provider.dart';
+import 'package:upgrade/services/daily_goals_service.dart';
+import 'package:upgrade/providers/health_provider.dart';
+
+class DailyGoalsSection extends ConsumerStatefulWidget {
   const DailyGoalsSection({super.key});
 
   @override
-  State<DailyGoalsSection> createState() => _DailyGoalsSectionState();
+  ConsumerState<DailyGoalsSection> createState() => _DailyGoalsSectionState();
 }
 
-class _DailyGoalsSectionState extends State<DailyGoalsSection> {
-  @override
-  void initState() {
-    super.initState();
-    // Refresh data when widget is created
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) setState(() {});
-    });
-  }
-
+class _DailyGoalsSectionState extends ConsumerState<DailyGoalsSection> {
   @override
   Widget build(BuildContext context) {
-    // Get real progress data
+    final user = ref.watch(userProfileProvider);
     final waterProgress = DailyGoalsService.getWaterProgress();
     final waterProgressString = DailyGoalsService.getWaterProgressString();
-
-    final stepsProgress = DailyGoalsService.getStepsProgress();
-    final stepsProgressString = DailyGoalsService.getStepsProgressString();
-
     final workoutProgress = DailyGoalsService.getWorkoutProgress();
     final workoutProgressString = DailyGoalsService.getWorkoutProgressString();
+    final intakeProgress = DailyGoalsService.getCaloriesEatenProgress(user);
+    final intakeString = DailyGoalsService.getCaloriesEatenProgressString(user);
 
-    final caloriesProgress = DailyGoalsService.getCaloriesProgress();
-    final caloriesProgressString =
-        DailyGoalsService.getCaloriesProgressString();
+    final vitals = ref.watch(healthVitalsProvider).value;
+    double stepsProgress;
+    String stepsProgressString;
+    String burnedNote = '';
+
+    if (vitals != null && vitals.isConnected) {
+      stepsProgress = vitals.stepsProgress;
+      stepsProgressString =
+          '${vitals.stepsFormatted}/${(vitals.stepGoal / 1000).toStringAsFixed(0)}k';
+      burnedNote = '${vitals.caloriesBurned} burned';
+    } else {
+      stepsProgress = DailyGoalsService.getStepsProgress();
+      stepsProgressString = DailyGoalsService.getStepsProgressString();
+      final burned = DailyGoalsService.getCaloriesBurned();
+      if (burned > 0) burnedNote = '$burned burned';
+    }
+
+    final carbsP = DailyGoalsService.getCarbsProgress(user);
+    final proteinP = DailyGoalsService.getProteinProgress(user);
+    final fatP = DailyGoalsService.getFatProgress(user);
+    final fiberP = DailyGoalsService.getFiberProgress();
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -45,7 +54,7 @@ class _DailyGoalsSectionState extends State<DailyGoalsSection> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
-                "My Daily Goals",
+                'My Daily Goals',
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -54,9 +63,7 @@ class _DailyGoalsSectionState extends State<DailyGoalsSection> {
               ),
               IconButton(
                 icon: const Icon(Icons.refresh),
-                onPressed: () {
-                  setState(() {});
-                },
+                onPressed: () => setState(() {}),
                 tooltip: 'Refresh goals',
               ),
             ],
@@ -82,69 +89,104 @@ class _DailyGoalsSectionState extends State<DailyGoalsSection> {
               padding: const EdgeInsets.all(24),
               child: Column(
                 children: [
-                  // Main Goals (2x2 Grid)
-                  Column(
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          GoalCircle(
-                            progress: waterProgress,
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF42A5F5), Color(0xFF1E88E5)],
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                            ),
-                            icon: Icons.water_drop,
-                            iconColor: Colors.blue,
-                            label: "Water",
-                            sublabel: waterProgressString,
+                      GestureDetector(
+                        onTap: () async {
+                          await DailyGoalsService.addWater(1);
+                          setState(() {});
+                        },
+                        child: GoalCircle(
+                          progress: waterProgress,
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF42A5F5), Color(0xFF1E88E5)],
                           ),
-                          GoalCircle(
-                            progress: stepsProgress,
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF66BB6A), Color(0xFF43A047)],
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                            ),
-                            icon: Icons.directions_walk,
-                            iconColor: Colors.green,
-                            label: "Steps",
-                            sublabel: stepsProgressString,
-                          ),
-                        ],
+                          icon: Icons.water_drop,
+                          iconColor: Colors.blue,
+                          label: 'Water',
+                          sublabel: waterProgressString,
+                        ),
                       ),
-                      const SizedBox(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          GoalCircle(
-                            progress: workoutProgress,
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFFBA68C8), Color(0xFF8E24AA)],
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                            ),
-                            icon: Icons.fitness_center,
-                            iconColor: Colors.purple,
-                            label: "Workout",
-                            sublabel: workoutProgressString,
+                      GestureDetector(
+                        onTap: () => _editSteps(context),
+                        child: GoalCircle(
+                          progress: stepsProgress,
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF66BB6A), Color(0xFF43A047)],
                           ),
-                          GoalCircle(
-                            progress: caloriesProgress,
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFFFFB74D), Color(0xFFF57C00)],
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                            ),
-                            icon: Icons.local_fire_department,
-                            iconColor: Colors.orange,
-                            label: "Calories",
-                            sublabel: caloriesProgressString,
-                          ),
-                        ],
+                          icon: Icons.directions_walk,
+                          iconColor: Colors.green,
+                          label: 'Steps',
+                          sublabel: stepsProgressString,
+                        ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      GoalCircle(
+                        progress: workoutProgress,
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFBA68C8), Color(0xFF8E24AA)],
+                        ),
+                        icon: Icons.fitness_center,
+                        iconColor: Colors.purple,
+                        label: 'Workout',
+                        sublabel: workoutProgressString,
+                      ),
+                      GoalCircle(
+                        progress: intakeProgress,
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFFB74D), Color(0xFFF57C00)],
+                        ),
+                        icon: Icons.restaurant,
+                        iconColor: Colors.orange,
+                        label: 'Intake',
+                        sublabel: burnedNote.isEmpty
+                            ? intakeString
+                            : '$intakeString · $burnedNote',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Macronutrients (eaten today)',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF2C2C2C),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  MacroBar(
+                    label: 'Carbs',
+                    progress: carbsP,
+                    value:
+                        '${DailyGoalsService.getCarbsEatenG()}g / ${DailyGoalsService.getTargetCarbsG(user)}g',
+                    color: Colors.blue,
+                  ),
+                  MacroBar(
+                    label: 'Protein',
+                    progress: proteinP,
+                    value:
+                        '${DailyGoalsService.getProteinEatenG()}g / ${DailyGoalsService.getTargetProteinG(user)}g',
+                    color: Colors.green,
+                  ),
+                  MacroBar(
+                    label: 'Fat',
+                    progress: fatP,
+                    value:
+                        '${DailyGoalsService.getFatEatenG()}g / ${DailyGoalsService.getTargetFatG(user)}g',
+                    color: Colors.orange,
+                  ),
+                  MacroBar(
+                    label: 'Fiber',
+                    progress: fiberP,
+                    value:
+                        '${DailyGoalsService.getFiberEatenG()}g / ${DailyGoalsService.getTargetFiberG()}g',
+                    color: Colors.brown,
                   ),
                 ],
               ),
@@ -154,9 +196,83 @@ class _DailyGoalsSectionState extends State<DailyGoalsSection> {
       ),
     );
   }
+
+  Future<void> _editSteps(BuildContext context) async {
+    final ctrl = TextEditingController(
+      text: DailyGoalsService.getSteps().toString(),
+    );
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Update steps'),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Steps today'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await DailyGoalsService.updateSteps(int.tryParse(ctrl.text) ?? 0);
+      setState(() {});
+    }
+  }
 }
 
-// ==================== Components ====================
+class MacroBar extends StatelessWidget {
+  final String label;
+  final double progress;
+  final String value;
+  final Color color;
+
+  const MacroBar({
+    super.key,
+    required this.label,
+    required this.progress,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(label, style: const TextStyle(fontSize: 12)),
+              Text(value, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: progress.clamp(0.0, 1.0),
+              minHeight: 6,
+              backgroundColor: color.withValues(alpha: 0.15),
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class GoalCircle extends StatelessWidget {
   final double progress;
   final LinearGradient gradient;
@@ -185,244 +301,31 @@ class GoalCircle extends StatelessWidget {
           child: Stack(
             alignment: Alignment.center,
             children: [
-              CustomPaint(
-                size: const Size(80, 80),
-                painter: CirclePainter(progress: progress, gradient: gradient),
+              SizedBox(
+                width: 80,
+                height: 80,
+                child: CircularProgressIndicator(
+                  value: progress.clamp(0.0, 1.0),
+                  strokeWidth: 6,
+                  backgroundColor: Colors.white.withValues(alpha: 0.5),
+                  valueColor: AlwaysStoppedAnimation(gradient.colors.first),
+                ),
               ),
-              Icon(icon, color: iconColor, size: 36),
+              Icon(icon, color: iconColor, size: 28),
             ],
           ),
         ),
         const SizedBox(height: 8),
         Text(
           label,
-          style: const TextStyle(
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF2C2C2C),
-          ),
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
         ),
         Text(
           sublabel,
-          style: const TextStyle(fontSize: 13, color: Color(0xFF757575)),
+          style: const TextStyle(fontSize: 10, color: Colors.grey),
+          textAlign: TextAlign.center,
         ),
       ],
     );
   }
-}
-
-class CaloriesGoal extends StatelessWidget {
-  final double progress;
-  final LinearGradient gradient;
-  final IconData icon;
-  final Color iconColor;
-  final String label;
-  final String current;
-  final String target;
-  final String unit;
-
-  const CaloriesGoal({
-    super.key,
-    required this.progress,
-    required this.gradient,
-    required this.icon,
-    required this.iconColor,
-    required this.label,
-    required this.current,
-    required this.target,
-    required this.unit,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
-      ),
-      child: Row(
-        children: [
-          // Semi-circular progress
-          SizedBox(
-            width: 100,
-            height: 60,
-            child: CustomPaint(
-              painter: ArcProgressPainter(
-                progress: progress,
-                gradient: gradient,
-                strokeWidth: 8,
-              ),
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(icon, color: iconColor, size: 24),
-                    const SizedBox(height: 4),
-                    Text(
-                      "${(progress * 100).round()}%",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                        color: iconColor,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 20),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 18,
-                    color: Color(0xFF2C2C2C),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text.rich(
-                  TextSpan(
-                    text: current,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 24,
-                      color: Color(0xFF2C2C2C),
-                    ),
-                    children: [
-                      TextSpan(
-                        text: " / $target $unit",
-                        style: const TextStyle(
-                          fontWeight: FontWeight.normal,
-                          fontSize: 16,
-                          color: Color(0xFF757575),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  "Great progress today! 🔥",
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: iconColor,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class ArcProgressPainter extends CustomPainter {
-  final double progress;
-  final LinearGradient gradient;
-  final double strokeWidth;
-
-  ArcProgressPainter({
-    required this.progress,
-    required this.gradient,
-    required this.strokeWidth,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height - 10);
-    final radius = (size.width / 2) - strokeWidth;
-
-    // Background arc
-    final backgroundPaint = Paint()
-      ..color = Colors.grey.withValues(alpha: 0.3)
-      ..strokeWidth = strokeWidth
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    // Progress arc
-    final progressPaint = Paint()
-      ..shader = gradient.createShader(
-        Rect.fromCircle(center: center, radius: radius),
-      )
-      ..strokeWidth = strokeWidth
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    // Draw background arc (180 degrees)
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      math.pi,
-      math.pi,
-      false,
-      backgroundPaint,
-    );
-
-    // Draw progress arc
-    final sweepAngle = math.pi * progress;
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      math.pi,
-      sweepAngle,
-      false,
-      progressPaint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(ArcProgressPainter oldDelegate) =>
-      oldDelegate.progress != progress;
-}
-
-class CirclePainter extends CustomPainter {
-  final double progress;
-  final LinearGradient gradient;
-
-  CirclePainter({required this.progress, required this.gradient});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final Paint basePaint = Paint()
-      ..color = Colors.grey.withValues(alpha: 0.3)
-      ..strokeWidth = 4
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    final Paint progressPaint = Paint()
-      ..shader = gradient.createShader(
-        Rect.fromCircle(
-          center: Offset(size.width / 2, size.height / 2),
-          radius: size.width / 2,
-        ),
-      )
-      ..strokeWidth = 4
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
-
-    final double radius = size.width / 2 - 4;
-    final Offset center = Offset(size.width / 2, size.height / 2);
-
-    canvas.drawCircle(center, radius, basePaint);
-
-    final double sweepAngle = 2 * math.pi * progress;
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      -math.pi / 2,
-      sweepAngle,
-      false,
-      progressPaint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(CirclePainter oldDelegate) =>
-      oldDelegate.progress != progress;
 }
