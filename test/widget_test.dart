@@ -1,30 +1,52 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:upgrade/features/widgets/workouts_section.dart';
+import 'package:upgrade/pose_detec.dart';
+import 'package:upgrade/services/daily_goals_service.dart';
 
-import 'package:upgrade/main.dart';
+import 'test_helpers.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  setUpAll(() async {
+    await initTestHive();
+  });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+  tearDownAll(() async {
+    await closeTestHive();
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+  testWidgets('workout card shows squat info', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: WorkoutCard(
+            title: 'Squats',
+            subtitle: '0 / 30 Reps',
+            progressPercent: 0,
+            color: Color(0xFFAB47BC),
+            buttonText: 'Start',
+            exerciseType: ExerciseType.squat,
+          ),
+        ),
+      ),
+    );
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('Squats'), findsOneWidget);
+    expect(find.text('0 / 30 Reps'), findsOneWidget);
+    expect(find.text('Start'), findsOneWidget);
+  });
+
+  test('workout keys match hive fields', () {
+    expect(DailyGoalsService.workoutKeyFor(ExerciseType.squat), 'squats');
+    expect(DailyGoalsService.workoutKeyFor(ExerciseType.pushup), 'pushups');
+    expect(DailyGoalsService.workoutKeyFor(ExerciseType.bicep), 'bicep_curls');
+  });
+
+  test('addWorkoutReps saves to hive', () async {
+    await DailyGoalsService.addWorkoutReps('squats', 5);
+    expect(DailyGoalsService.getWorkoutCounts()['squats'], 5);
+
+    await DailyGoalsService.addWorkoutReps('squats', 3);
+    expect(DailyGoalsService.getWorkoutCounts()['squats'], 8);
   });
 }
