@@ -90,7 +90,6 @@ class _PoseDetectorViewState extends State<PoseDetectorView> {
             onCameraLensDirectionChanged: (value) =>
                 _cameraLensDirection = value,
           ),
-          // Overlay with count display
           Positioned(
             bottom: 40,
             left: 0,
@@ -156,16 +155,13 @@ class _PoseDetectorViewState extends State<PoseDetectorView> {
     if (poses.isNotEmpty) {
       final pose = poses.first;
 
-      // ✅ Detect only the selected exercise
       if (widget.exerciseType == null) {
-        // If no exercise type specified, detect all (backward compatibility)
         _counter.detectBicepCurl(pose);
         _counter.detectSquat(pose);
         _counter.detectPushUp(pose);
         _text =
             "Bicep Curls: ${_counter.bicepCount}\nSquats: ${_counter.squatCount}\nPush-ups: ${_counter.pushupCount}";
       } else {
-        // Only detect the selected exercise
         switch (widget.exerciseType!) {
           case ExerciseType.squat:
             _counter.detectSquat(pose);

@@ -1,4 +1,3 @@
-/// Immutable data class holding today's health snapshot from wearables.
 class HealthVitals {
   final int steps;
   final int stepGoal;

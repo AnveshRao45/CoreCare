@@ -44,9 +44,16 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Android / Kotlin build cache
 /android/.gradle/
 /android/.kotlin/
 **/*.salive
 
+# Local model weights (download on device)
 /aimodels/*.gguf
 /aimodels/*.bin
+
+# Personal notes (optional — remove lines if you want docs in repo)
+# NEXT_STEPS.md
+# AI_MODEL_FLOW.md
+# WORKOUT_IMPROVEMENTS.md
