@@ -14,6 +14,7 @@ import 'package:upgrade/models/user_profile.dart';
 import 'package:upgrade/providers/user_provider.dart';
 import 'package:upgrade/services/hive_service.dart';
 import 'package:upgrade/services/model_storage_service.dart';
+import 'package:upgrade/services/nutrition_targets_service.dart';
 
 class LlamaState {
   final String? modelPath;
@@ -252,17 +253,33 @@ class LlamaNotifier extends Notifier<LlamaState> {
       if (cached.isNotEmpty) return cached;
     }
 
+    final user = ref.read(userProfileProvider);
     final userProfile = ref.read(userProfileProvider.notifier).userJson();
     final webContext = useWebEnrichment ? await textSearch() : null;
+
+    // Deterministic targets from the same service used by the dashboard UI.
+    final targetKcal = NutritionTargetsService.targetCalories(user);
+    final targetCarbs = NutritionTargetsService.targetCarbsG(user);
+    final targetProtein = NutritionTargetsService.targetProteinG(user);
+    final targetFat = NutritionTargetsService.targetFatG(user);
+    final targetFiber = NutritionTargetsService.targetFiberG();
 
     final prompt = '''
 You are a certified nutritionist. Create a complete daily meal plan based on:
 
 User Profile: ${jsonEncode(userProfile)}
-${webContext != null ? 'Reference notes: $webContext' : 'Use only the user profile — no external data.'}
+Daily nutrition targets (must stay near these totals across all 4 meals):
+- Calories: $targetKcal kcal
+- Carbohydrates: ${targetCarbs}g
+- Protein: ${targetProtein}g
+- Fat: ${targetFat}g
+- Fiber: ${targetFiber}g
+${webContext != null ? 'Reference notes: $webContext' : 'Use only the user profile and targets — no external data.'}
 
 Create exactly 4 meals: Breakfast, Lunch, Dinner, and Snacks.
 Each food item must include calories and macros in grams.
+The sum of meal totalCalories should be approximately $targetKcal (within about ±10%).
+Respect allergies, dietary restrictions and medical conditions from the profile.
 
 Return ONLY a valid JSON array with this structure:
 
@@ -368,64 +385,6 @@ Return only the JSON array, no markdown, no explanations.
     }
   }
 
-  String _calculateTargetCalories(Map<String, dynamic>? userProfile) {
-    if (userProfile == null ||
-        userProfile['age'] == null ||
-        userProfile['weight'] == null ||
-        userProfile['height'] == null ||
-        userProfile['gender'] == null) {
-      return "2000-2200"; // Default range
-    }
-
-    // Calculate BMR using Mifflin-St Jeor Equation
-    double bmr;
-    if (userProfile['gender']?.toString().toLowerCase() == 'male') {
-      bmr =
-          88.362 +
-          (13.397 * (userProfile['weight'] as num).toDouble()) +
-          (4.799 * (userProfile['height'] as num).toDouble()) -
-          (5.677 * (userProfile['age'] as num).toDouble());
-    } else {
-      bmr =
-          447.593 +
-          (9.247 * (userProfile['weight'] as num).toDouble()) +
-          (3.098 * (userProfile['height'] as num).toDouble()) -
-          (4.330 * (userProfile['age'] as num).toDouble());
-    }
-
-    // Apply activity factor
-    double activityFactor;
-    switch (userProfile['activityLevel']?.toString().toLowerCase()) {
-      case 'sedentary':
-      case 'low':
-        activityFactor = 1.2;
-        break;
-      case 'light':
-      case 'lightly active':
-        activityFactor = 1.375;
-        break;
-      case 'moderate':
-      case 'moderately active':
-        activityFactor = 1.55;
-        break;
-      case 'high':
-      case 'very active':
-        activityFactor = 1.725;
-        break;
-      case 'extremely active':
-        activityFactor = 1.9;
-        break;
-      default:
-        activityFactor = 1.55; // Default to moderate
-    }
-
-    final tdee = bmr * activityFactor;
-    final lowerRange = (tdee - 100).round();
-    final upperRange = (tdee + 100).round();
-
-    return "$lowerRange-$upperRange";
-  }
-
   Future<String?> textSearch() async {
     try {
       final userProfile = ref.read(userProfileProvider);
@@ -477,7 +436,7 @@ Return only the JSON array, no markdown, no explanations.
       final response = await http.get(Uri.parse(firstUrl));
 
       if (response.statusCode != 200) {
-        print("❌ Failed to fetch page: ${response.statusCode}");
+        print("Failed to fetch page: ${response.statusCode}");
         ddgs.close();
         return null;
       }

@@ -205,18 +205,26 @@ class HealthVitalsNotifier extends AsyncNotifier<HealthVitals> {
             3.098 * user.height! -
             4.330 * user.age!;
       }
+      // Keep in sync with NutritionTargetsService / onboarding labels.
       double factor = 1.55;
-      switch (user.activityLevel?.toLowerCase()) {
+      final activity = user.activityLevel?.toLowerCase().trim();
+      switch (activity) {
         case 'sedentary':
         case 'low':
           factor = 1.2;
           break;
+        case 'somewhat active':
         case 'light':
         case 'lightly active':
           factor = 1.375;
           break;
-        case 'high':
+        case 'active':
+        case 'moderate':
+        case 'moderately active':
+          factor = 1.55;
+          break;
         case 'very active':
+        case 'high':
           factor = 1.725;
           break;
         case 'extremely active':
@@ -224,10 +232,7 @@ class HealthVitalsNotifier extends AsyncNotifier<HealthVitals> {
           break;
       }
       calGoal = (bmr * factor).round();
-      stepGoal = user.activityLevel?.toLowerCase() == 'high' ||
-              user.activityLevel?.toLowerCase() == 'very active'
-          ? 12000
-          : 10000;
+      stepGoal = activity == 'high' || activity == 'very active' ? 12000 : 10000;
     }
 
     final localHydration = DailyGoalsService.getHydrationLiters();

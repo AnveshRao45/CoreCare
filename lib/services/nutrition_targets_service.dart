@@ -94,18 +94,26 @@ class NutritionTargetsService {  static const int defaultCalories = 2000;
           4.330 * user.age!;
     }
 
+    // Labels must match onboarding options in health_wellness_step.dart:
+    // Sedentary | Somewhat Active | Active | Very Active
     double factor = 1.55;
-    switch (user.activityLevel?.toLowerCase()) {
+    switch (user.activityLevel?.toLowerCase().trim()) {
       case 'sedentary':
       case 'low':
         factor = 1.2;
         break;
+      case 'somewhat active':
       case 'light':
       case 'lightly active':
         factor = 1.375;
         break;
-      case 'high':
+      case 'active':
+      case 'moderate':
+      case 'moderately active':
+        factor = 1.55;
+        break;
       case 'very active':
+      case 'high':
         factor = 1.725;
         break;
       case 'extremely active':
