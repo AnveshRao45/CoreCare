@@ -9,8 +9,10 @@ import 'package:llama_flutter_android/llama_flutter_android.dart';
 
 import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart';
+import 'package:upgrade/models/health_vitals.dart';
 import 'package:upgrade/models/meal.dart';
 import 'package:upgrade/models/user_profile.dart';
+import 'package:upgrade/providers/health_provider.dart';
 import 'package:upgrade/providers/user_provider.dart';
 import 'package:upgrade/services/hive_service.dart';
 import 'package:upgrade/services/model_storage_service.dart';
@@ -66,16 +68,26 @@ class LlamaNotifier extends Notifier<LlamaState> {
       'Give clear, practical answers in 2-6 sentences. '
       'Do not add disclaimer notes such as "I am not a professional". '
       'Answer the user\'s question directly. '
-      'Use the user profile below when the question is about their diet, '
-      'goals, or health.';
+      'Use the user profile and today\'s vitals below when the question is '
+      'about their diet, activity, sleep, hydration, or health.';
 
   String _chatSystemPromptWithProfile() {
-    final user = ref.read(userProfileProvider);
-    if (user == null) return _chatSystemPrompt;
+    final parts = <String>[_chatSystemPrompt];
 
-    final summary = _profileSummary(user);
-    if (summary.isEmpty) return _chatSystemPrompt;
-    return '$_chatSystemPrompt\n\nUser profile:\n$summary';
+    final user = ref.read(userProfileProvider);
+    if (user != null) {
+      final summary = _profileSummary(user);
+      if (summary.isNotEmpty) {
+        parts.add('User profile:\n$summary');
+      }
+    }
+
+    final vitalsSummary = _vitalsSummary();
+    if (vitalsSummary.isNotEmpty) {
+      parts.add('Today\'s vitals (Health Connect):\n$vitalsSummary');
+    }
+
+    return parts.join('\n\n');
   }
 
   String _profileSummary(UserProfile user) {
@@ -97,6 +109,30 @@ class LlamaNotifier extends Notifier<LlamaState> {
         'Allergies: ${user.allergies}',
       if (user.medicalConditions.isNotEmpty)
         'Medical conditions: ${user.medicalConditions.join(', ')}',
+    ];
+    return lines.join('\n');
+  }
+
+  /// Compact snapshot of today's Health Connect vitals for the chat prompt.
+  String _vitalsSummary() {
+    final vitals = ref.read(healthVitalsProvider).value;
+    if (vitals == null || !vitals.isConnected) return '';
+    return _formatVitalsForPrompt(vitals);
+  }
+
+  static String _formatVitalsForPrompt(HealthVitals vitals) {
+    final lines = <String>[
+      'Steps: ${vitals.steps} / ${vitals.stepGoal}',
+      if (vitals.heartRate > 0)
+        'Heart rate: ${vitals.heartRate.round()} bpm'
+            '${vitals.heartRateStatus != 'N/A' ? ' (${vitals.heartRateStatus})' : ''}',
+      if (vitals.heartRateAvg > 0)
+        'Avg heart rate today: ${vitals.heartRateAvg.round()} bpm',
+      'Calories burned: ${vitals.caloriesBurned} / ${vitals.caloriesGoal}',
+      if (vitals.sleepDuration > Duration.zero)
+        'Sleep: ${vitals.sleepFormatted}',
+      'Hydration: ${vitals.hydrationLiters.toStringAsFixed(1)} L'
+          ' / ${vitals.hydrationGoal.toStringAsFixed(1)} L',
     ];
     return lines.join('\n');
   }
