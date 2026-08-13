@@ -299,6 +299,7 @@ class LlamaNotifier extends Notifier<LlamaState> {
     final targetProtein = NutritionTargetsService.targetProteinG(user);
     final targetFat = NutritionTargetsService.targetFatG(user);
     final targetFiber = NutritionTargetsService.targetFiberG();
+    final vitalsSummary = _vitalsSummary();
 
     final prompt = '''
 You are a certified nutritionist. Create a complete daily meal plan based on:
@@ -310,7 +311,7 @@ Daily nutrition targets (must stay near these totals across all 4 meals):
 - Protein: ${targetProtein}g
 - Fat: ${targetFat}g
 - Fiber: ${targetFiber}g
-${webContext != null ? 'Reference notes: $webContext' : 'Use only the user profile and targets — no external data.'}
+${vitalsSummary.isNotEmpty ? 'Today\'s vitals (Health Connect):\n$vitalsSummary\nUse vitals only as light context (e.g. higher activity may favour slightly more carbs); do not ignore the calorie/macro targets above.\n' : ''}${webContext != null ? 'Reference notes: $webContext' : 'Use only the user profile and targets — no external data.'}
 
 Create exactly 4 meals: Breakfast, Lunch, Dinner, and Snacks.
 Each food item must include calories and macros in grams.
