@@ -17,6 +17,7 @@ import 'package:upgrade/providers/user_provider.dart';
 import 'package:upgrade/services/hive_service.dart';
 import 'package:upgrade/services/model_storage_service.dart';
 import 'package:upgrade/services/nutrition_targets_service.dart';
+import 'package:upgrade/utils/meal_plan_parser.dart';
 
 class LlamaState {
   final String? modelPath;
@@ -343,7 +344,7 @@ Return only the JSON array, no markdown, no explanations.
       output.write(token);
     }
 
-    final meals = _parseMealPlanJson(output.toString().trim());
+    final meals = parseMealPlanJson(output.toString().trim());
     if (meals.isEmpty) return [];
 
     try {
@@ -371,78 +372,28 @@ Return only the JSON array, no markdown, no explanations.
     }
   }
 
-  List<Meal> _parseMealPlanJson(String rawOutput) {
-    try {
-      String cleaned = rawOutput;
-      if (cleaned.contains('```json')) {
-        final startIndex = cleaned.indexOf('```json') + 7;
-        final endIndex = cleaned.indexOf('```', startIndex);
-        cleaned = endIndex != -1
-            ? cleaned.substring(startIndex, endIndex)
-            : cleaned.substring(startIndex);
-      } else if (cleaned.contains('```')) {
-        final startIndex = cleaned.indexOf('```') + 3;
-        final endIndex = cleaned.indexOf('```', startIndex);
-        cleaned = endIndex != -1
-            ? cleaned.substring(startIndex, endIndex)
-            : cleaned.substring(startIndex);
-      }
-      cleaned = cleaned.trim();
-
-      int start = cleaned.indexOf('[');
-      int end = -1;
-      if (start != -1) {
-        int bracketCount = 0;
-        for (int i = start; i < cleaned.length; i++) {
-          if (cleaned[i] == '[') bracketCount++;
-          if (cleaned[i] == ']') {
-            bracketCount--;
-            if (bracketCount == 0) {
-              end = i;
-              break;
-            }
-          }
-        }
-      }
-      if (start == -1 || end == -1) return [];
-
-      final parsed = jsonDecode(cleaned.substring(start, end + 1));
-      if (parsed is! List) return [];
-
-      final meals = <Meal>[];
-      for (final mealData in parsed) {
-        if (mealData is Map<String, dynamic>) {
-          meals.add(Meal.fromJson(mealData));
-        }
-      }
-      return meals;
-    } catch (e) {
-      debugPrint('[LLM] Meal JSON parse error: $e');
-      return [];
-    }
-  }
-
   Future<String?> textSearch() async {
     try {
       final userProfile = ref.read(userProfileProvider);
 
       final queryParts = <String>[
-        if (userProfile!.dietaryTypes?.isNotEmpty ?? false)
-          "diet type ${userProfile.dietaryTypes!.join(', ')}",
-        if (userProfile.dietaryRestrictions?.isNotEmpty ?? false)
-          "diet restrictions ${userProfile.dietaryRestrictions!.join(', ')}",
-        if (userProfile.allergies != null && userProfile.allergies!.isNotEmpty)
+        if (userProfile != null && userProfile.dietaryTypes.isNotEmpty)
+          "diet type ${userProfile.dietaryTypes.join(', ')}",
+        if (userProfile != null && userProfile.dietaryRestrictions.isNotEmpty)
+          "diet restrictions ${userProfile.dietaryRestrictions.join(', ')}",
+        if (userProfile?.allergies != null &&
+            userProfile!.allergies!.trim().isNotEmpty)
           "allergies ${userProfile.allergies}",
-        if (userProfile.medicalConditions?.isNotEmpty ?? false)
-          "medical conditions ${userProfile.medicalConditions!.join(', ')}",
-        if (userProfile.activityLevel != null)
-          "activity level ${userProfile.activityLevel}",
-        if (userProfile.stressLevel != null)
-          "stress level ${userProfile.stressLevel}",
-        if (userProfile.smokingHabit != null)
-          "smoking habit ${userProfile.smokingHabit}",
-        if (userProfile.hasDigestiveIssues)
-          "digestive issues ${userProfile.digestiveIssuesDescription ?? ''}",
+        if (userProfile != null && userProfile.medicalConditions.isNotEmpty)
+          "medical conditions ${userProfile.medicalConditions.join(', ')}",
+        if (userProfile?.activityLevel != null)
+          "activity level ${userProfile!.activityLevel}",
+        if (userProfile?.stressLevel != null)
+          "stress level ${userProfile!.stressLevel}",
+        if (userProfile?.smokingHabit != null)
+          "smoking habit ${userProfile!.smokingHabit}",
+        if (userProfile?.hasDigestiveIssues == true)
+          "digestive issues ${userProfile!.digestiveIssuesDescription ?? ''}",
       ];
 
       final query = queryParts.isEmpty
